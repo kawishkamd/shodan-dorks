@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shodan Dork Generator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --surface3: #21262d;
+    --border: #30363d;
+    --border2: #444c56;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --accent: #58a6ff;
+    --accent-bg: #0d2241;
+    --green: #3fb950;
+    --green-bg: #0a2514;
+    --red: #f85149;
+    --yellow: #d29922;
+    --yellow-bg: #2d1f03;
+    --purple: #bc8cff;
+    --mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --r: 6px;
+  }
+
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
+
+  /* TOP BAR */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .topbar-logo { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.05em; }
+  .topbar-tabs { display: flex; gap: 2px; margin-left: 8px; }
+  .tab { padding: 5px 12px; border-radius: var(--r); background: none; border: none; color: var(--text2); cursor: pointer; font-size: 12px; font-family: var(--sans); transition: all 0.15s; }
+  .tab:hover { color: var(--text); background: var(--surface3); }
+  .tab.active { background: var(--surface3); color: var(--text); font-weight: 500; }
+  .topbar-right { margin-left: auto; font-size: 11px; color: var(--text3); background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; }
+
+  /* LAYOUT */
+  .layout { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 48px); }
+
+  /* SIDEBAR */
+  .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; display: flex; flex-direction: column; }
+  .sb-group { border-bottom: 1px solid var(--border); }
+  .sb-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px 4px; cursor: pointer; user-select: none; }
+  .sb-group-header span { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); }
+  .sb-group-header .arrow { font-size: 9px; color: var(--text3); margin-left: auto; transition: transform 0.15s; }
+  .sb-group.collapsed .arrow { transform: rotate(-90deg); }
+  .sb-group.collapsed .sb-items { display: none; }
+  .sb-items { padding-bottom: 4px; }
+  .nav-btn { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 14px; font-size: 12px; font-family: var(--sans); color: var(--text2); background: none; border: none; cursor: pointer; transition: all 0.12s; border-radius: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-btn:hover { color: var(--text); background: var(--surface2); }
+  .nav-btn.active { color: var(--accent); background: var(--accent-bg); }
+  .nav-btn .nb-badge { margin-left: auto; font-size: 10px; background: var(--surface3); color: var(--text3); border-radius: 10px; padding: 1px 6px; flex-shrink: 0; }
+  .nav-btn.active .nb-badge { background: var(--accent-bg); color: var(--accent); }
+
+  /* MAIN CONTENT */
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .main-inner { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+
+  /* PAGE PANELS */
+  .page { display: none; }
+  .page.active { display: flex; flex-direction: column; gap: 16px; }
+
+  /* SECTION HEADER */
+  .sec-hdr { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); margin-bottom: 6px; }
+
+  /* FILTER CHIPS */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-size: 11px; padding: 4px 10px; border: 1px solid var(--border2); border-radius: 20px; background: none; color: var(--text2); cursor: pointer; font-family: var(--sans); transition: all 0.12s; }
+  .chip:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+  /* FILTER ROWS */
+  .filter-list { display: flex; flex-direction: column; gap: 5px; }
+  .filter-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); transition: border-color 0.12s; }
+  .filter-row:focus-within { border-color: var(--border2); }
+  .filter-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); min-width: 58px; flex-shrink: 0; }
+  .filter-pfx { font-family: var(--mono); font-size: 11px; color: var(--text3); flex-shrink: 0; white-space: nowrap; }
+  .filter-input { flex: 1; border: none; background: transparent; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; min-width: 0; }
+  .filter-input::placeholder { color: var(--text3); }
+  .filter-del { background: none; border: none; color: var(--text3); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 3px; flex-shrink: 0; transition: color 0.12s; }
+  .filter-del:hover { color: var(--red); }
+  .filter-note { font-size: 10px; color: var(--text3); flex-shrink: 0; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 28px 20px; color: var(--text3); border: 1px dashed var(--border2); border-radius: var(--r); }
+  .empty-state b { color: var(--text2); }
+
+  /* QUERY OUTPUT */
+  .query-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .query-header { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); gap: 8px; }
+  .query-header-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); }
+  .query-box { padding: 12px 14px; font-family: var(--mono); font-size: 12px; color: var(--text); word-break: break-all; line-height: 1.8; min-height: 46px; }
+  .query-box.empty-q { color: var(--text3); font-family: var(--sans); font-size: 12px; line-height: 1.5; }
+
+  /* BUTTONS */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn { font-size: 12px; font-family: var(--sans); padding: 6px 14px; border: 1px solid var(--border2); border-radius: var(--r); background: none; color: var(--text); cursor: pointer; transition: all 0.12s; font-weight: 500; }
+  .btn:hover { background: var(--surface3); border-color: var(--text2); }
+  .btn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+  .btn-primary:hover { background: #79b8ff; border-color: #79b8ff; color: #0d1117; }
+  .btn-green { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .btn-green:hover { background: #0d3318; }
+  .btn-ghost { color: var(--text3); border-color: transparent; background: none; }
+  .btn-ghost:hover { color: var(--red); background: none; border-color: var(--border); }
+  .ml-auto { margin-left: auto; }
+  .btn-copied { background: var(--green-bg) !important; border-color: var(--green) !important; color: var(--green) !important; }
+
+  /* DIVIDER */
+  hr { border: none; border-top: 1px solid var(--border); }
+
+  /* ASN TABLE */
+  .asn-table { width: 100%; border-collapse: collapse; }
+  .asn-table th { text-align: left; padding: 6px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); border-bottom: 1px solid var(--border); }
+  .asn-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .asn-table tr:last-child td { border-bottom: none; }
+  .asn-table tr:hover td { background: var(--surface2); }
+  .asn-mono { font-family: var(--mono); color: var(--accent); font-size: 11px; }
+  .asn-use-btn { font-size: 11px; padding: 3px 9px; border: 1px solid var(--border2); border-radius: 4px; background: none; color: var(--text2); cursor: pointer; font-family: var(--sans); }
+  .asn-use-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 20px; margin-right: 3px; }
+  .tag-isp { background: #0d2241; color: #58a6ff; }
+  .tag-mobile { background: #1a1f2e; color: #bc8cff; }
+  .tag-gov { background: #2d1f03; color: #d29922; }
+  .tag-cloud { background: #0a2514; color: #3fb950; }
+  .tag-research { background: #1e1b2e; color: #9e7cff; }
+
+  /* REFERENCE CARDS */
+  .ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .ref-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; }
+  .ref-card-title { font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ref-card-title .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .ref-item { font-family: var(--mono); font-size: 11px; color: var(--text3); padding: 3px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ref-item:last-child { border-bottom: none; }
+  .ref-item-label { color: var(--accent); flex-shrink: 0; }
+  .ref-item-desc { color: var(--text3); font-size: 10px; font-family: var(--sans); text-align: right; flex-shrink: 0; }
+
+  /* SEARCH HIGHLIGHT */
+  .hl { background: var(--accent-bg); color: var(--accent); border-radius: 2px; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo">⬡ SHODAN DORK GENERATOR</span>
+  <div class="topbar-tabs">
+    <button class="tab active" onclick="switchTab('builder',this)">Builder</button>
+    <button class="tab" onclick="switchTab('asn',this)">ASN Database</button>
+    <button class="tab" onclick="switchTab('reference',this)">Filter Reference</button>
+  </div>
+  <span class="topbar-right">For authorized security research only</span>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Exposed Services</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('mongodb',this)">MongoDB open</button>
+        <button class="nav-btn" onclick="loadTpl('elasticsearch',this)">Elasticsearch open</button>
+        <button class="nav-btn" onclick="loadTpl('redis',this)">Redis open</button>
+        <button class="nav-btn" onclick="loadTpl('mysql',this)">MySQL exposed</button>
+        <button class="nav-btn" onclick="loadTpl('postgres',this)">PostgreSQL exposed</button>
+        <button class="nav-btn" onclick="loadTpl('ftp_anon',this)">FTP anonymous</button>
+        <button class="nav-btn" onclick="loadTpl('smb_open',this)">SMB open shares</button>
+        <button class="nav-btn" onclick="loadTpl('telnet',this)">Telnet exposed</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Remote Access</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('rdp',this)">RDP with screenshot</button>
+        <button class="nav-btn" onclick="loadTpl('vnc_noauth',this)">VNC no auth</button>
+        <button class="nav-btn" onclick="loadTpl('ssh_banner',this)">SSH banners</button>
+        <button class="nav-btn" onclick="loadTpl('adb_exposed',this)">Android ADB open</button>
+        <button class="nav-btn" onclick="loadTpl('teamviewer',this)">TeamViewer</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>IoT &amp; Cameras</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('ip_cameras',this)">IP cameras</button>
+        <button class="nav-btn" onclick="loadTpl('hikvision',this)">Hikvision DVR</button>
+        <button class="nav-btn" onclick="loadTpl('dahua',this)">Dahua DVR/NVR</button>
+        <button class="nav-btn" onclick="loadTpl('dvr_login',this)">Generic DVR login</button>
+        <button class="nav-btn" onclick="loadTpl('webcam_server',this)">Webcam servers</button>
+        <button class="nav-btn" onclick="loadTpl('routers',this)">Home routers</button>
+        <button class="nav-btn" onclick="loadTpl('netgear',this)">Netgear routers</button>
+        <button class="nav-btn" onclick="loadTpl('mikrotik',this)">MikroTik</button>
+        <button class="nav-btn" onclick="loadTpl('ubiquiti',this)">Ubiquiti devices</button>
+        <button class="nav-btn" onclick="loadTpl('smart_home',this)">Home Assistant</button>
+        <button class="nav-btn" onclick="loadTpl('nas_synology',this)">Synology NAS</button>
+        <button class="nav-btn" onclick="loadTpl('printer',this)">Printers exposed</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>ICS / SCADA / OT</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('modbus',this)">Modbus</button>
+        <button class="nav-btn" onclick="loadTpl('siemens_s7',this)">Siemens S7</button>
+        <button class="nav-btn" onclick="loadTpl('scada_generic',this)">Generic SCADA</button>
+        <button class="nav-btn" onclick="loadTpl('ics_fuel',this)">Fuel tank gauges</button>
+        <button class="nav-btn" onclick="loadTpl('bacnet',this)">BACnet (HVAC)</button>
+        <button class="nav-btn" onclick="loadTpl('atm',this)">ATM machines</button>
+        <button class="nav-btn" onclick="loadTpl('energy_meter',this)">Energy meters</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Web &amp; Apps</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('admin_panels',this)">Admin panels</button>
+        <button class="nav-btn" onclick="loadTpl('jenkins',this)">Jenkins CI</button>
+        <button class="nav-btn" onclick="loadTpl('kibana',this)">Kibana open</button>
+        <button class="nav-btn" onclick="loadTpl('grafana',this)">Grafana</button>
+        <button class="nav-btn" onclick="loadTpl('wp_exposed',this)">WordPress exposed</button>
+        <button class="nav-btn" onclick="loadTpl('phpmyadmin',this)">phpMyAdmin</button>
+        <button class="nav-btn" onclick="loadTpl('citrix',this)">Citrix gateway</button>
+        <button class="nav-btn" onclick="loadTpl('login_pages',this)">Login pages</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Network Infra</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('vpn_fortinet',this)">Fortinet VPN</button>
+        <button class="nav-btn" onclick="loadTpl('vpn_paloalto',this)">Palo Alto VPN</button>
+        <button class="nav-btn" onclick="loadTpl('vpn_pulse',this)">Pulse Secure VPN</button>
+        <button class="nav-btn" onclick="loadTpl('vpn_cisco',this)">Cisco ASA VPN</button>
+        <button class="nav-btn" onclick="loadTpl('expired_ssl',this)">Expired SSL certs</button>
+        <button class="nav-btn" onclick="loadTpl('self_signed_ssl',this)">Self-signed certs</button>
+        <button class="nav-btn" onclick="loadTpl('snmp',this)">SNMP open</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Sri Lanka ISPs</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('lk_dialog',this)">Dialog (AS18001)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_dialog2',this)">Dialog (AS17770)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_slt',this)">SLT Internet (AS9329)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_slt2',this)">SLT Global (AS45489)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_mobitel',this)">Mobitel (AS45356)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_hutch',this)">Hutch (AS17470)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_hutch2',this)">Hutch Colombo (AS132447)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_lcs',this)">Lanka Comm (AS5087)</button>
+        <button class="nav-btn" onclick="loadTpl('lk_all',this)">All LK devices</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Cloud Providers</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('aws',this)">Amazon AWS</button>
+        <button class="nav-btn" onclick="loadTpl('google_cloud',this)">Google Cloud</button>
+        <button class="nav-btn" onclick="loadTpl('azure',this)">Microsoft Azure</button>
+        <button class="nav-btn" onclick="loadTpl('digitalocean',this)">DigitalOcean</button>
+        <button class="nav-btn" onclick="loadTpl('linode',this)">Linode / Akamai</button>
+      </div>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-header" onclick="toggleGroup(this)">
+        <span>Vulnerabilities</span><span class="arrow">▾</span>
+      </div>
+      <div class="sb-items">
+        <button class="nav-btn" onclick="loadTpl('eternalblue',this)">EternalBlue (MS17-010)</button>
+        <button class="nav-btn" onclick="loadTpl('log4shell',this)">Log4Shell (CVE-2021)</button>
+        <button class="nav-btn" onclick="loadTpl('heartbleed',this)">Heartbleed</button>
+        <button class="nav-btn" onclick="loadTpl('default_creds',this)">Default credentials</button>
+        <button class="nav-btn" onclick="loadTpl('wifi_passwords',this)">Exposed WiFi config</button>
+        <button class="nav-btn" onclick="loadTpl('ethereum_miners',this)">Ethereum miners</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAIN AREA -->
+  <div class="main">
+    <div class="main-inner">
+
+      <!-- BUILDER PAGE -->
+      <div class="page active" id="page-builder">
+
+        <div>
+          <div class="sec-hdr">Add Filter</div>
+          <div class="chips">
+            <button class="chip" onclick="addFilter('asn')">+ ASN</button>
+            <button class="chip" onclick="addFilter('country')">+ Country</button>
+            <button class="chip" onclick="addFilter('port')">+ Port</button>
+            <button class="chip" onclick="addFilter('product')">+ Product</button>
+            <button class="chip" onclick="addFilter('ssl_cn')">+ SSL CN</button>
+            <button class="chip" onclick="addFilter('hostname')">+ Hostname</button>
+            <button class="chip" onclick="addFilter('org')">+ Org</button>
+            <button class="chip" onclick="addFilter('os')">+ OS</button>
+            <button class="chip" onclick="addFilter('city')">+ City</button>
+            <button class="chip" onclick="addFilter('version')">+ Version</button>
+            <button class="chip" onclick="addFilter('net')">+ Net/CIDR</button>
+            <button class="chip" onclick="addFilter('http_title')">+ HTTP Title</button>
+            <button class="chip" onclick="addFilter('http_status')">+ HTTP Status</button>
+            <button class="chip" onclick="addFilter('vuln')">+ CVE/Vuln</button>
+            <button class="chip" onclick="addFilter('has_screenshot')">+ Screenshot</button>
+            <button class="chip" onclick="addFilter('tag')">+ Tag</button>
+            <button class="chip" onclick="addFilter('custom')">+ Custom</button>
+          </div>
+        </div>
+
+        <div class="filter-list" id="filterList"></div>
+        <div class="empty-state" id="emptyState">
+          Pick a template from the left sidebar, or add a filter above.<br>
+          <b>All filters are AND-ed together automatically.</b>
+        </div>
+
+        <hr>
+
+        <div class="query-wrap">
+          <div class="query-header">
+            <span class="query-header-label">Generated Query</span>
+            <div style="margin-left:auto;display:flex;gap:6px">
+              <button class="btn" id="copyBtn" onclick="doCopy()" disabled>Copy</button>
+              <button class="btn btn-green" onclick="doSearch()">Open in Shodan ↗</button>
+              <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+            </div>
+          </div>
+          <div class="query-box empty-q" id="queryBox">Your query will appear here as you build it.</div>
+        </div>
+
+      </div>
+
+      <!-- ASN DATABASE PAGE -->
+      <div class="page" id="page-asn">
+        <div>
+          <div class="sec-hdr" style="margin-bottom:12px">Sri Lanka — All Active ASNs</div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+            <table class="asn-table">
+              <thead><tr><th>ASN</th><th>Name</th><th>Type</th><th></th></tr></thead>
+              <tbody id="lkAsnTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="sec-hdr" style="margin-bottom:12px">Global — Major Cloud &amp; Transit ASNs</div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+            <table class="asn-table">
+              <thead><tr><th>ASN</th><th>Name</th><th>Type</th><th></th></tr></thead>
+              <tbody id="globalAsnTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTER REFERENCE PAGE -->
+      <div class="page" id="page-reference">
+        <div class="sec-hdr" style="margin-bottom:10px">Shodan Filter Reference</div>
+        <div class="ref-grid" id="refGrid"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const CFG = {
+  asn:          { pre:'asn:AS',                   suf:'',  ph:'18001',           lbl:'ASN' },
+  country:      { pre:'country:',                  suf:'',  ph:'LK',              lbl:'Country' },
+  port:         { pre:'port:',                     suf:'',  ph:'3306',            lbl:'Port' },
+  product:      { pre:'product:"',                 suf:'"', ph:'MySQL',           lbl:'Product' },
+  ssl_cn:       { pre:'ssl.cert.subject.CN:"',     suf:'"', ph:'*.example.com',   lbl:'SSL CN' },
+  hostname:     { pre:'hostname:"',                suf:'"', ph:'speedtest',       lbl:'Hostname' },
+  org:          { pre:'org:"',                     suf:'"', ph:'Dialog Axiata',   lbl:'Org' },
+  os:           { pre:'os:"',                      suf:'"', ph:'Windows 10',      lbl:'OS' },
+  city:         { pre:'city:"',                    suf:'"', ph:'Colombo',         lbl:'City' },
+  version:      { pre:'version:"',                 suf:'"', ph:'2.4.7',           lbl:'Version' },
+  net:          { pre:'net:',                      suf:'',  ph:'192.168.1.0/24',  lbl:'Net/CIDR' },
+  http_title:   { pre:'http.title:"',              suf:'"', ph:'Admin Panel',     lbl:'HTTP Title' },
+  http_status:  { pre:'http.status:',              suf:'',  ph:'200',             lbl:'HTTP Status' },
+  vuln:         { pre:'vuln:',                     suf:'',  ph:'CVE-2021-44228',  lbl:'CVE/Vuln' },
+  has_screenshot:{ pre:'has_screenshot:',          suf:'',  ph:'true',            lbl:'Screenshot' },
+  tag:          { pre:'tag:',                      suf:'',  ph:'ics',             lbl:'Tag' },
+  custom:       { pre:'',                          suf:'',  ph:'http.component:"jQuery"', lbl:'Custom' }
+};
+
+// ─── TEMPLATES ─────────────────────────────────────────────────────────────────
+const TPL = {
+  // Exposed Services
+  mongodb:        [['product','MongoDB'],['port','27017'],['custom','"MongoDB Server Information" -authentication']],
+  elasticsearch:  [['port','9200'],['custom','http.title:"Elastic"']],
+  redis:          [['port','6379'],['custom','"redis_version"']],
+  mysql:          [['product','MySQL'],['port','3306']],
+  postgres:       [['product','PostgreSQL'],['port','5432']],
+  ftp_anon:       [['port','21'],['custom','"220" "230 Login successful."']],
+  smb_open:       [['port','445'],['custom','"Authentication: disabled"']],
+  telnet:         [['port','23'],['custom','console gateway']],
+  // Remote Access
+  rdp:            [['port','3389'],['has_screenshot','true']],
+  vnc_noauth:     [['product','VNC'],['custom','"authentication disabled"']],
+  ssh_banner:     [['port','22'],['product','OpenSSH']],
+  adb_exposed:    [['port','5555'],['custom','"Android Debug Bridge" "Device"']],
+  teamviewer:     [['product','TeamViewer'],['port','5938']],
+  // IoT & Cameras
+  ip_cameras:     [['custom','http.title:"IP Camera"']],
+  hikvision:      [['custom','http.title:"Hikvision"']],
+  dahua:          [['custom','http.title:"Dahua"']],
+  dvr_login:      [['custom','http.title:"DVR Login"']],
+  webcam_server:  [['custom','"webcam 7" OR "IP Webcam" OR "webcamXP"']],
+  routers:        [['custom','http.title:"router" http.status:200']],
+  netgear:        [['custom','http.title:"NETGEAR"']],
+  mikrotik:       [['product','MikroTik']],
+  ubiquiti:       [['custom','http.title:"airOS"']],
+  smart_home:     [['custom','http.title:"Home Assistant"']],
+  nas_synology:   [['custom','http.title:"Synology DiskStation"']],
+  printer:        [['custom','http.title:"HP Color LaserJet"']],
+  // ICS / SCADA / OT
+  modbus:         [['port','502'],['tag','ics']],
+  siemens_s7:     [['custom','"Siemens S7"'],['port','102']],
+  scada_generic:  [['tag','ics'],['has_screenshot','true']],
+  ics_fuel:       [['custom','"I20100"'],['port','10001']],
+  bacnet:         [['port','47808'],['custom','"BACnet"']],
+  atm:            [['custom','NCR'],['port','161']],
+  energy_meter:   [['custom','"Power Measurement"'],['port','23']],
+  // Web & Apps
+  admin_panels:   [['http_title','Admin Panel'],['http_status','200']],
+  jenkins:        [['custom','"x-jenkins" http.status:200']],
+  kibana:         [['product','Kibana'],['port','5601']],
+  grafana:        [['custom','http.title:"Grafana"'],['port','3000']],
+  wp_exposed:     [['custom','http.html:"wp-content"'],['http_status','200']],
+  phpmyadmin:     [['custom','http.title:"phpMyAdmin"']],
+  citrix:         [['custom','http.title:"Citrix Gateway"']],
+  login_pages:    [['http_title','Login'],['has_screenshot','true']],
+  // Network Infra
+  vpn_fortinet:   [['product','Fortinet'],['port','443']],
+  vpn_paloalto:   [['custom','http.title:"GlobalProtect"']],
+  vpn_pulse:      [['custom','http.title:"Pulse Connect Secure"']],
+  vpn_cisco:      [['custom','http.title:"Cisco ASDM"']],
+  expired_ssl:    [['custom','ssl.cert.expired:true'],['port','443']],
+  self_signed_ssl:[['custom','ssl.cert.issuer.cn:ssl.cert.subject.cn'],['port','443']],
+  snmp:           [['port','161'],['custom','"snmp" "public"']],
+  // Sri Lanka ISPs
+  lk_dialog:      [['asn','18001'],['country','LK']],
+  lk_dialog2:     [['asn','17770'],['country','LK']],
+  lk_slt:         [['asn','9329'],['country','LK']],
+  lk_slt2:        [['asn','45489'],['country','LK']],
+  lk_mobitel:     [['asn','45356'],['country','LK']],
+  lk_hutch:       [['asn','17470'],['country','LK']],
+  lk_hutch2:      [['asn','132447'],['country','LK']],
+  lk_lcs:         [['asn','5087'],['country','LK']],
+  lk_all:         [['country','LK'],['has_screenshot','true']],
+  // Cloud
+  aws:            [['org','Amazon'],['custom','http.status:200']],
+  google_cloud:   [['asn','15169']],
+  azure:          [['org','Microsoft Azure'],['custom','http.status:200']],
+  digitalocean:   [['asn','14061']],
+  linode:         [['asn','63949']],
+  // Vulns
+  eternalblue:    [['vuln','CVE-2017-0144']],
+  log4shell:      [['vuln','CVE-2021-44228']],
+  heartbleed:     [['vuln','CVE-2014-0160']],
+  default_creds:  [['custom','"default password"'],['http_status','200']],
+  wifi_passwords: [['custom','html:"def_wirelesspassword"']],
+  ethereum_miners:[['custom','"ETH - Total speed"']],
+};
+
+// ─── ASN DATA ──────────────────────────────────────────────────────────────────
+const LK_ASNS = [
+  { asn:'18001', name:'Dialog Axiata PLC',                    tags:['isp','mobile'],   note:'Main Dialog broadband + mobile' },
+  { asn:'17770', name:'Dialog Axiata PLC (DIALOG-LK)',        tags:['isp'],            note:'Dialog legacy / transit AS' },
+  { asn:'9329',  name:'Sri Lanka Telecom Internet (SLTINT)',  tags:['isp'],            note:'SLT fixed broadband' },
+  { asn:'45489', name:'Sri Lanka Telecom PLC Global Peering', tags:['isp'],            note:'SLT global peering / IX' },
+  { asn:'138984',name:'Sri Lanka Telecom Ltd',                tags:['isp'],            note:'SLT additional block' },
+  { asn:'45356', name:'Mobitel Pvt Ltd',                      tags:['mobile'],         note:'SLT-Mobitel mobile network' },
+  { asn:'17470', name:'Hutchison Telecommunications Lanka',   tags:['mobile'],         note:'Hutch mobile (main)' },
+  { asn:'132447',name:'Hutchison Lanka – Colombo 4',          tags:['mobile'],         note:'Hutch secondary / Colombo PoP' },
+  { asn:'5087',  name:'Lanka Communication Services',         tags:['isp'],            note:'LCS transit / enterprise' },
+  { asn:'38229', name:'LEARN – Lanka Education & Research',   tags:['research'],       note:'Academic / university network' },
+  { asn:'132124',name:'ICTA Sri Lanka',                       tags:['gov'],            note:'Govt IT agency' },
+  { asn:'17904', name:'Sri Lankan Airlines',                  tags:['gov'],            note:'SriLankan Airlines corporate' },
+];
+
+const GLOBAL_ASNS = [
+  { asn:'16509', name:'Amazon AWS',             tags:['cloud'],   note:'' },
+  { asn:'15169', name:'Google LLC',             tags:['cloud'],   note:'' },
+  { asn:'8075',  name:'Microsoft Azure',        tags:['cloud'],   note:'' },
+  { asn:'14061', name:'DigitalOcean',           tags:['cloud'],   note:'' },
+  { asn:'63949', name:'Linode / Akamai',        tags:['cloud'],   note:'' },
+  { asn:'13335', name:'Cloudflare',             tags:['cloud'],   note:'' },
+  { asn:'20473', name:'Vultr',                  tags:['cloud'],   note:'' },
+  { asn:'9498',  name:'Bharti Airtel India',    tags:['isp'],     note:'' },
+  { asn:'4134',  name:'China Telecom',          tags:['isp'],     note:'' },
+  { asn:'174',   name:'Cogent Communications', tags:['isp'],     note:'Major transit' },
+  { asn:'3356',  name:'Lumen / Level3',         tags:['isp'],     note:'Major transit' },
+];
+
+// ─── FILTER REFERENCE ──────────────────────────────────────────────────────────
+const REF_GROUPS = [
+  { title:'Basic Filters', color:'#58a6ff', items:[
+    { k:'country:LK', d:'2-letter country code' },
+    { k:'city:"Colombo"', d:'City name' },
+    { k:'port:443', d:'Open port number' },
+    { k:'net:1.2.3.0/24', d:'IP range (CIDR)' },
+    { k:'hostname:"*.lk"', d:'Hostname wildcard' },
+    { k:'org:"Dialog"', d:'Organization name' },
+    { k:'asn:AS18001', d:'Autonomous System' },
+    { k:'os:"Windows 10"', d:'Operating system' },
+  ]},
+  { title:'Service / App Filters', color:'#3fb950', items:[
+    { k:'product:"Apache"', d:'Product name' },
+    { k:'version:"2.4"', d:'Version string' },
+    { k:'http.title:"Admin"', d:'Page title contains' },
+    { k:'http.status:200', d:'HTTP response code' },
+    { k:'http.html:"keyword"', d:'HTML body contains' },
+    { k:'http.server:"nginx"', d:'Server header' },
+    { k:'http.component:"jQuery"', d:'Web framework' },
+    { k:'http.favicon.hash:N', d:'Favicon hash (int)' },
+  ]},
+  { title:'SSL / TLS Filters', color:'#d29922', items:[
+    { k:'ssl.cert.expired:true', d:'Expired cert' },
+    { k:'ssl.cert.subject.CN:"x"', d:'Cert common name' },
+    { k:'ssl.cert.issuer.CN:"x"', d:'Cert issuer' },
+    { k:'ssl:"keyword"', d:'Any SSL field' },
+    { k:'has_ssl:true', d:'Has SSL/TLS' },
+    { k:'ssl.alpn:http/1.1', d:'ALPN protocol' },
+    { k:'ssl.jarm:"hash"', d:'JARM fingerprint' },
+  ]},
+  { title:'Tags (Shodan-assigned)', color:'#bc8cff', items:[
+    { k:'tag:ics', d:'Industrial control system' },
+    { k:'tag:iot', d:'IoT device' },
+    { k:'tag:honeypot', d:'Detected as honeypot' },
+    { k:'tag:cloud', d:'Cloud provider' },
+    { k:'tag:vpn', d:'VPN service' },
+    { k:'tag:tor', d:'Tor exit node' },
+    { k:'screenshot.label:ics', d:'Screenshot labelled ICS' },
+  ]},
+  { title:'Vulnerability Filters', color:'#f85149', items:[
+    { k:'vuln:CVE-XXXX-XXXX', d:'Specific CVE' },
+    { k:'vuln:ms17-010', d:'EternalBlue' },
+    { k:'vuln:CVE-2021-44228', d:'Log4Shell' },
+    { k:'vuln:CVE-2014-0160', d:'Heartbleed' },
+    { k:'vuln:CVE-2019-0708', d:'BlueKeep RDP' },
+  ]},
+  { title:'Screenshot &amp; Visual', color:'#58a6ff', items:[
+    { k:'has_screenshot:true', d:'Has screenshot captured' },
+    { k:'screenshot.label:"login"', d:'Login page (ML label)' },
+    { k:'screenshot.label:"webcam"', d:'Webcam (ML label)' },
+    { k:'screenshot.label:"ics"', d:'ICS dashboard (ML)' },
+  ]},
+  { title:'Temporal Filters', color:'#8b949e', items:[
+    { k:'after:01/01/2024', d:'Seen after date (DD/MM/YYYY)' },
+    { k:'before:31/12/2024', d:'Seen before date' },
+  ]},
+  { title:'Shodan CLI Quick Ref', color:'#d29922', items:[
+    { k:'shodan search "query"', d:'Run search' },
+    { k:'shodan count "query"', d:'Count results' },
+    { k:'shodan download f.json.gz "q"', d:'Download results' },
+    { k:'shodan host 1.2.3.4', d:'Host details' },
+    { k:'shodan myip', d:'Your public IP' },
+    { k:'shodan stats "query"', d:'Aggregate stats' },
+  ]},
+];
+
+// ─── STATE ─────────────────────────────────────────────────────────────────────
+let seq = 0;
+let filters = [];
+
+// ─── FILTER ENGINE ─────────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function render() {
+  const list = document.getElementById('filterList');
+  const empty = document.getElementById('emptyState');
+  empty.style.display = filters.length ? 'none' : 'block';
+
+  list.innerHTML = filters.map(f => {
+    const c = CFG[f.t] || CFG.custom;
+    return `<div class="filter-row" id="r${f.id}">
+      <span class="filter-lbl">${c.lbl}</span>
+      <span class="filter-pfx">${esc(c.pre)}</span>
+      <input class="filter-input" value="${esc(f.v)}" placeholder="${esc(c.ph)}" oninput="upd(${f.id},this.value)" spellcheck="false">
+      <span class="filter-pfx">${esc(c.suf)}</span>
+      <button class="filter-del" onclick="del(${f.id})" title="Remove">×</button>
+    </div>`;
+  }).join('');
+
+  renderQuery();
+}
+
+function renderQuery() {
+  const parts = filters
+    .map(f => { const c = CFG[f.t] || CFG.custom; return f.v.trim() ? c.pre + f.v.trim() + c.suf : null; })
+    .filter(Boolean);
+  const q = parts.join(' ');
+  const box = document.getElementById('queryBox');
+  const btn = document.getElementById('copyBtn');
+  if (q) {
+    box.textContent = q;
+    box.classList.remove('empty-q');
+  } else {
+    box.textContent = 'Your query will appear here as you build it.';
+    box.classList.add('empty-q');
+  }
+  btn.disabled = !q;
+  btn.className = q ? 'btn btn-primary' : 'btn';
+}
+
+function upd(id, v){ const f = filters.find(x => x.id === id); if(f){ f.v = v; renderQuery(); } }
+function del(id){ filters = filters.filter(x => x.id !== id); render(); }
+
+function addFilter(t, v = '') {
+  filters.push({ id: seq++, t, v });
+  render();
+  const rows = document.querySelectorAll('.filter-row');
+  if(rows.length) rows[rows.length-1].querySelector('input').focus();
+}
+
+function loadTpl(name, btn) {
+  const tpl = TPL[name];
+  if(!tpl) return;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  filters = tpl.map(([t, v]) => ({ id: seq++, t, v }));
+  render();
+  // Switch to builder tab
+  switchTabById('builder');
+}
+
+function clearAll() {
+  filters = [];
+  seq = 0;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  render();
+}
+
+function getQuery() {
+  return filters
+    .map(f => { const c = CFG[f.t] || CFG.custom; return f.v.trim() ? c.pre + f.v.trim() + c.suf : null; })
+    .filter(Boolean).join(' ');
+}
+
+function doCopy() {
+  const q = getQuery();
+  if(!q) return;
+  navigator.clipboard.writeText(q).then(() => {
+    const b = document.getElementById('copyBtn');
+    const orig = b.textContent;
+    b.textContent = '✓ Copied!';
+    b.className = 'btn btn-copied';
+    setTimeout(() => { b.textContent = orig; b.className = 'btn btn-primary'; }, 2000);
+  });
+}
+
+function doSearch() {
+  const q = getQuery();
+  if(q) window.open('https://www.shodan.io/search?query=' + encodeURIComponent(q), '_blank');
+}
+
+// ─── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
+function toggleGroup(header) {
+  header.closest('.sb-group').classList.toggle('collapsed');
+}
+
+// ─── TAB SWITCHING ─────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  switchTabById(id);
+}
+
+function switchTabById(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const pg = document.getElementById('page-' + id);
+  if(pg) pg.classList.add('active');
+  // Sync tab buttons
+  document.querySelectorAll('.tab').forEach(t => {
+    if(t.getAttribute('onclick') && t.getAttribute('onclick').includes("'" + id + "'")) t.classList.add('active');
+    else if(id !== 'builder' && id !== 'asn' && id !== 'reference') { /* leave alone */ }
+  });
+  if(id === 'builder') {
+    document.querySelectorAll('.tab')[0].classList.add('active');
+    document.querySelectorAll('.tab')[1].classList.remove('active');
+    document.querySelectorAll('.tab')[2].classList.remove('active');
+  }
+}
+
+// ─── BUILD ASN TABLES ──────────────────────────────────────────────────────────
+function tagEl(type) {
+  const labels = { isp:'ISP', mobile:'Mobile', gov:'Gov', cloud:'Cloud', research:'Research' };
+  return `<span class="tag tag-${type}">${labels[type]||type}</span>`;
+}
+
+function buildAsnTable(rows, tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="asn-mono">AS${r.asn}</td>
+      <td>${r.name}${r.note ? `<br><span style="font-size:10px;color:var(--text3)">${r.note}</span>` : ''}</td>
+      <td>${r.tags.map(tagEl).join('')}</td>
+      <td><button class="asn-use-btn" onclick="useAsn('${r.asn}')">Use →</button></td>
+    </tr>`).join('');
+}
+
+function useAsn(num) {
+  switchTabById('builder');
+  document.querySelectorAll('.tab')[0].classList.add('active');
+  document.querySelectorAll('.tab')[1].classList.remove('active');
+  document.querySelectorAll('.tab')[2].classList.remove('active');
+  const ex = filters.find(f => f.t === 'asn');
+  if(ex) { ex.v = num; render(); }
+  else addFilter('asn', num);
+}
+
+// ─── BUILD REFERENCE GRID ──────────────────────────────────────────────────────
+function buildRefGrid() {
+  const grid = document.getElementById('refGrid');
+  grid.innerHTML = REF_GROUPS.map(g => `
+    <div class="ref-card">
+      <div class="ref-card-title">
+        <span class="dot" style="background:${g.color}"></span>
+        ${g.title}
+      </div>
+      ${g.items.map(i => `
+        <div class="ref-item">
+          <span class="ref-item-label">${i.k}</span>
+          <span class="ref-item-desc">${i.d}</span>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────────
+buildAsnTable(LK_ASNS, 'lkAsnTable');
+buildAsnTable(GLOBAL_ASNS, 'globalAsnTable');
+buildRefGrid();
+render();
+</script>
+</body>
+</html>
